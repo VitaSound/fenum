@@ -1,112 +1,92 @@
 require ../forth-packages/ttester/1.1.0/ttester.4th
 require ../fenum.4th
 
-\ ---------------------------------------------------------------
-\ "Объекты": variables, в .add попадают их адреса.
-\ Значения подобраны так, чтобы предикаты были осмысленны.
-\ ---------------------------------------------------------------
-variable v1   1 v1 !
-variable v2   2 v2 !
-variable v3   3 v3 !
-variable v4   4 v4 !
-variable v5   5 v5 !
+variable v10   10 v10 !
+variable v20   20 v20 !
+variable v30   30 v30 !
+variable v40   40 v40 !
 
-\ Список (после .add в обратном порядке): 5 -> 4 -> 3 -> 2 -> 1
-ulist new value src
-v1 src .add
-v2 src .add
-v3 src .add
-v4 src .add
-v5 src .add
+variable %tl
+variable %tl2
+variable %sum
 
-\ ===============================================================
-\ Предикаты / трансформеры / редьюсеры
-\ ===============================================================
-: even? ( addr -- flag )   @ 1 and 0= ;
-: odd?  ( addr -- flag )   @ 1 and 0<> ;
-: gt2?  ( addr -- flag )   @ 2 > ;
-: pos?  ( addr -- flag )   @ 0> ;
-: neg?  ( addr -- flag )   @ 0< ;
-: id    ( addr -- addr )   ;
-: sum   ( addr acc -- acc' ) swap @ + ;
+: mk-tl ( -- )    ulist-new %tl ! ;
+: rm-tl ( -- )    %tl @ ulist-dispose ;
+: rm-tl2 ( -- )   %tl2 @ ulist-dispose ;
 
-\ ===============================================================
-\ enum-count
-\ ===============================================================
-T{ src ' even? enum-count                   -> 2 }T   \ 4 и 2
-T{ src ' odd?  enum-count                   -> 3 }T   \ 5,3,1
-T{ src ' pos?  enum-count                   -> 5 }T
-T{ src ' neg?  enum-count                   -> 0 }T
+: %add-to-sum ( addr -- ) @ %sum +! ;
 
-ulist new value empty-c
-T{ empty-c ' even? enum-count               -> 0 }T
+: %asc  ( a b -- flag )   swap @ swap @ <= ;
+: %desc ( a b -- flag )   swap @ swap @ >= ;
 
-\ ===============================================================
-\ enum-any?
-\ ===============================================================
-T{ src ' even? enum-any?                    -> true  }T
-T{ src ' neg?  enum-any?                    -> false }T
-T{ empty-c ' pos? enum-any?                 -> false }T
+\ ============== enum-each идентичен ulist-each =========
+T{
+  0 %sum !
+  mk-tl
+  v10 %tl @ ulist-add  v20 %tl @ ulist-add  v30 %tl @ ulist-add
+  ' %add-to-sum %tl @ enum-each
+  rm-tl
+  %sum @
+-> 60 }T
 
-\ ===============================================================
-\ enum-all?
-\ ===============================================================
-T{ src ' pos?  enum-all?                    -> true  }T
-T{ src ' even? enum-all?                    -> false }T
-T{ empty-c ' pos? enum-all?                 -> true  }T   \ vacuously true
+\ enum-each на пустом — не зовёт xt
+T{
+  0 %sum !
+  mk-tl
+  ' %add-to-sum %tl @ enum-each
+  rm-tl
+  %sum @
+-> 0 }T
 
-\ ===============================================================
-\ enum-find — первый по порядку обхода (head → tail)
-\ src: 5,4,3,2,1; первый чётный = 4
-\ ===============================================================
-T{ src ' even? enum-find                    -> v4 }T
-T{ src ' odd?  enum-find                    -> v5 }T
-T{ src ' neg?  enum-find                    -> 0  }T   \ не найдено
-T{ empty-c ' pos? enum-find                 -> 0  }T
+\ ============== enum-sort ascending ====================
+\ Было head→tail: v30 v20 v10.  Sorted ascending: v10 v20 v30.
+T{
+  mk-tl
+  v10 %tl @ ulist-add  v20 %tl @ ulist-add  v30 %tl @ ulist-add
+  ' %asc %tl @ enum-sort %tl2 !
+  0 %tl2 @ ulist-nth-addr
+  1 %tl2 @ ulist-nth-addr
+  2 %tl2 @ ulist-nth-addr
+  rm-tl  rm-tl2
+-> v10 v20 v30 }T
 
-\ ===============================================================
-\ enum-reduce — сумма всех значений
-\ ===============================================================
-T{ src 0   ' sum enum-reduce                -> 15 }T   \ 5+4+3+2+1
-T{ src 100 ' sum enum-reduce                -> 115 }T
-T{ empty-c 42 ' sum enum-reduce             -> 42 }T
+\ ============== enum-sort descending ===================
+T{
+  mk-tl
+  v10 %tl @ ulist-add  v20 %tl @ ulist-add  v30 %tl @ ulist-add
+  ' %desc %tl @ enum-sort %tl2 !
+  0 %tl2 @ ulist-nth-addr
+  1 %tl2 @ ulist-nth-addr
+  2 %tl2 @ ulist-nth-addr
+  rm-tl  rm-tl2
+-> v30 v20 v10 }T
 
-\ ===============================================================
-\ enum-filter — новый ulist с сохранением порядка
-\ ===============================================================
-src ' gt2? enum-filter value filtered
-T{ filtered .len                            -> 3   }T
-T{ 0 filtered .nth-addr                     -> v5  }T   \ порядок как у src
-T{ 1 filtered .nth-addr                     -> v4  }T
-T{ 2 filtered .nth-addr                     -> v3  }T
-filtered .dispose
+\ ============== enum-sort пустого ======================
+T{
+  mk-tl
+  ' %asc %tl @ enum-sort %tl2 !
+  %tl2 @ ulist-empty?
+  %tl2 @ ulist-len
+  rm-tl  rm-tl2
+-> -1 0 }T
 
-\ исходник не изменён
-T{ src .len                                 -> 5   }T
-T{ 0 src .nth-addr                          -> v5  }T
+\ ============== enum-sort не меняет исходник ===========
+T{
+  mk-tl
+  v10 %tl @ ulist-add  v20 %tl @ ulist-add  v30 %tl @ ulist-add
+  ' %asc %tl @ enum-sort %tl2 !
+  0 %tl  @ ulist-nth-addr          \ исходник: head=v30
+  0 %tl2 @ ulist-nth-addr          \ sorted: head=v10
+  %tl @ ulist-len
+  rm-tl  rm-tl2
+-> v30 v10 3 }T
 
-\ filter на пустом
-T{ empty-c ' even? enum-filter dup .len swap .dispose -> 0 }T
-
-\ ===============================================================
-\ enum-map — новый ulist той же длины
-\ ===============================================================
-src ' id enum-map value mapped
-T{ mapped .len                              -> 5   }T
-T{ 0 mapped .nth-addr                       -> v5  }T
-T{ 4 mapped .nth-addr                       -> v1  }T
-mapped .dispose
-
-T{ empty-c ' id enum-map dup .len swap .dispose -> 0 }T
-
-\ ===============================================================
-\ Полиморфизм: универсальная функция filter-positive
-\ работает с любым container.
-\ ===============================================================
-: positive-only ( c -- c' ) ['] pos? enum-filter ;
-src positive-only value pp
-T{ pp .len                                  -> 5 }T
-pp .dispose
-
-empty-c .dispose
-src .dispose
+\ ============== enum-sort на одном элементе ============
+T{
+  mk-tl
+  v10 %tl @ ulist-add
+  ' %asc %tl @ enum-sort %tl2 !
+  %tl2 @ ulist-len
+  0 %tl2 @ ulist-nth-addr
+  rm-tl  rm-tl2
+-> 1 v10 }T

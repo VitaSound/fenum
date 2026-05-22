@@ -1,17 +1,27 @@
-\ fenum-ulist.4th — universal односвязный список как класс container
+\ fenum-ulist.4th — universal односвязный список как struct (вариант A)
 \
-\ ulist реализует интерфейс container: add/each/len/contains?/nth-addr/
-\ clear/reverse/dispose. Узлы — низкоуровневая struct unode%, наружу
-\ не торчат.
+\ ulist — это заголовок (container с типом TYPE_ULIST), хранящий
+\ указатель на цепочку внутренних узлов. Сами узлы скрыты от API.
+\
+\ Стек-конвенция:
+\   - lst всегда top (последний аргумент перед словом).
+\   - xt последний аргумент: `obj-a lst ulist-add`, `' xt lst ulist-each`.
 
 require ./fenum-container.4th
 
 \ ---------------------------------------------------------------
-\ Внутренние узлы (обычная gforth struct, не объекты mini-oof2)
+\ Заголовок ulist% расширяет container% на одно поле — head.
+\ ---------------------------------------------------------------
+container%
+    cell% field ulist-head
+constant ulist%
+
+\ ---------------------------------------------------------------
+\ Внутренние узлы (приватные, наружу не торчат)
 \ ---------------------------------------------------------------
 struct
-    cell% field unode-next
     cell% field unode-addr
+    cell% field unode-next
 constant unode%
 
 \ addr next -- node
@@ -28,7 +38,7 @@ constant unode%
         swap 1+ swap unode-next @
     repeat drop ;
 
-\ chain xt --   ; xt ( addr -- )
+\ chain xt --     ; xt: ( addr -- )
 : unode-chain-each ( chain xt -- )
     >r begin dup while
         dup unode-addr @ r@ execute unode-next @
@@ -69,39 +79,58 @@ constant unode%
     drop ;
 
 \ ---------------------------------------------------------------
-\ Класс ulist : container
+\ Публичный API ulist
 \ ---------------------------------------------------------------
-container class
-    field: ulist-head
-end-class ulist
-standard:field
 
-ulist :method empty? ( -- flag )
+\ -- lst        создать пустой ulist
+: ulist-new ( -- lst )
+    ulist% allocate throw
+    TYPE_ULIST over obj-type !
+    0 over ulist-head ! ;
+
+\ lst -- flag
+: ulist-empty? ( lst -- flag )
     ulist-head @ 0= ;
 
-ulist :method len ( -- n )
+\ lst -- n
+: ulist-len ( lst -- n )
     ulist-head @ unode-chain-len ;
 
-ulist :method add ( addr -- )
-    ulist-head @ unode-new ulist-head ! ;
+\ addr lst --       добавить в голову (O(1))
+: ulist-add ( addr lst -- )
+    dup >r                  ( addr lst ; r: lst )
+    ulist-head @            ( addr head )
+    unode-new               ( node )
+    r> ulist-head ! ;       \ записать новый head
 
-ulist :method contains? ( addr -- flag )
-    ulist-head @ swap unode-chain-find 0<> ;
+\ addr lst -- flag
+: ulist-contains? ( addr lst -- flag )
+    ulist-head @ swap       ( head addr )
+    unode-chain-find 0<> ;
 
-ulist :method nth-addr ( n -- addr|0 )
-    ulist-head @ swap unode-chain-nth
+\ n lst -- addr|0
+: ulist-nth-addr ( n lst -- addr|0 )
+    ulist-head @ swap       ( head n )
+    unode-chain-nth
     dup if unode-addr @ then ;
 
-ulist :method each ( xt -- )
-    ulist-head @ swap unode-chain-each ;
+\ xt lst --      ; xt: ( addr -- )
+: ulist-each ( xt lst -- )
+    ulist-head @ swap       ( head xt )
+    unode-chain-each ;
 
-ulist :method clear ( -- )
-    ulist-head @ unode-chain-free
-    0 ulist-head ! ;
+\ lst --         in-place реверс цепочки
+: ulist-reverse ( lst -- )
+    dup ulist-head @ unode-chain-reverse
+    swap ulist-head ! ;
 
-ulist :method reverse ( -- )
-    ulist-head @ unode-chain-reverse ulist-head ! ;
+\ lst --         удалить все узлы, lst остаётся пустым (валидным)
+: ulist-clear ( lst -- )
+    dup ulist-head @ unode-chain-free
+    0 swap ulist-head ! ;
 
-ulist :method dispose ( -- )
-    ulist-head @ unode-chain-free
-    dispose-self ;
+\ lst --         освободить узлы + сам заголовок (lst больше нельзя
+\                использовать)
+: ulist-dispose ( lst -- )
+    dup ulist-head @ unode-chain-free
+    free throw ;

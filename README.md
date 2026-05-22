@@ -1,10 +1,19 @@
 # fenum
 
-Forth-библиотека универсальных контейнеров на ООП (`mini-oof2`) с набором функций высшего порядка в стиле Elixir `Enum`.
+Forth-библиотека универсальных контейнеров на чистых `struct` с type-tag-диспетчером в стиле Elixir `Enum`.
 
-Идея простая: базовый класс `container` задаёт интерфейс (`add`, `each`, `len`, `contains?`, `nth-addr`, `clear`, `reverse`, `dispose`, `new-empty`). Конкретные контейнеры наследуют его и переопределяют методы. Поверх интерфейса лежат полиморфные слова `enum-filter`, `enum-map`, `enum-reduce`, `enum-count`, `enum-find`, `enum-any?`, `enum-all?` — они работают с **любым** наследником `container` без изменений.
+## Идея
 
-Сейчас реализован `ulist` (universal односвязный список). При добавлении `hashmap` или другого контейнера все `enum-*` сразу с ним заработают.
+В Elixir данные отделены от функций: `Enum.each(list, fn)`, `Enum.sort(list, fn)` работают с любым перечислимым типом. У самого `List` нет «методов» — это просто структура данных, а универсальные операции живут в модуле `Enum`.
+
+`fenum` повторяет тот же подход для Gforth:
+
+- Каждый контейнер — обычная `struct`, начинающаяся с поля `obj-type` (типовая метка).
+- Слова контейнера (`ulist-*`) — обычные процедуры, без ООП-диспатча.
+- Слова `enum-*` смотрят на `obj-type` и направляют вызов соответствующему контейнеру через `case`.
+- Добавить новый тип контейнера = добавить константу `TYPE_*`, реализовать его слова и дописать `of`-ветку в `enum-*`.
+
+Никаких классов, методов, vtable. Только структуры и слова.
 
 Создано с [FMix](https://github.com/VitaSound/fmix).
 
@@ -14,7 +23,7 @@ Forth-библиотека универсальных контейнеров н�
 fmix packages.get
 ```
 
-Используются стандартные модули Gforth: `mini-oof2.fs`, `stuff.fs`.
+Используются стандартные модули Gforth: `struct.fs`.
 
 ## Подключение
 
@@ -27,74 +36,54 @@ require ./fenum.4th
 | Файл | Назначение |
 |------|------------|
 | `fenum.4th` | точка входа |
-| `fenum-container.4th` | абстрактный класс `container` |
-| `fenum-ulist.4th` | класс `ulist` : `container` |
-| `fenum-enum.4th` | HOF: `enum-filter` `-map` `-reduce` `-count` `-find` `-any?` `-all?` |
-| `tests/fenum-ulist_test.4th` | тесты ulist |
-| `tests/fenum-enum_test.4th` | тесты HOF |
+| `fenum-container.4th` | `container%` (`obj-type`) + константы типов `TYPE_*` |
+| `fenum-ulist.4th` | universal односвязный список (`ulist-*`) |
+| `fenum-enum.4th` | диспетчеры `enum-each`, `enum-sort` |
+| `tests/fenum-ulist_test.4th` | тесты `ulist` |
+| `tests/fenum-enum_test.4th` | тесты `enum-*` |
 
-## Интерфейс `container`
+## Стек-конвенция
 
-| Метод | Стек | Описание |
+Контейнер всегда **на топе стека** (последний аргумент перед словом):
+
+```forth
+addr  lst   ulist-add
+addr  lst   ulist-contains?
+n     lst   ulist-nth-addr
+xt    lst   ulist-each
+xt    lst   enum-each
+xt    lst   enum-sort
+```
+
+Это аналог Forth-идиомы `value addr !`, где «получатель» — на верхушке.
+
+## API: `ulist`
+
+| Слово | Стек | Описание |
 |---|---|---|
-| `empty?` | `( -- flag )` | пустой? |
-| `len` | `( -- n )` | количество элементов |
-| `add` | `( addr -- )` | добавить объект (в `ulist` — в голову, O(1)) |
-| `contains?` | `( addr -- flag )` | содержит объект? |
-| `nth-addr` | `( n -- addr\|0 )` | n-й объект (0-based) |
-| `each` | `( xt -- )` | xt: `( addr -- )` для каждого элемента |
-| `clear` | `( -- )` | удалить все элементы |
-| `reverse` | `( -- )` | для упорядоченных — in-place; иначе noop |
-| `new-empty` | `( -- new-container )` | новый пустой объект **того же класса** |
-| `dispose` | `( -- )` | освободить содержимое + сам объект |
+| `ulist-new` | `( -- lst )` | создать пустой список |
+| `ulist-empty?` | `( lst -- flag )` | пустой? |
+| `ulist-len` | `( lst -- n )` | длина |
+| `ulist-add` | `( addr lst -- )` | добавить в голову (O(1)) |
+| `ulist-contains?` | `( addr lst -- flag )` | содержит адрес? |
+| `ulist-nth-addr` | `( n lst -- addr\|0 )` | n-й адрес, 0-based, вне диапазона → 0 |
+| `ulist-each` | `( xt lst -- )` | xt: `( addr -- )` для каждого элемента |
+| `ulist-reverse` | `( lst -- )` | in-place разворот |
+| `ulist-clear` | `( lst -- )` | удалить узлы; `lst` остаётся валидным пустым |
+| `ulist-dispose` | `( lst -- )` | освободить узлы + сам заголовок (после этого `lst` использовать нельзя) |
 
-Полиморфизм через `new-empty` использует layout `mini-oof2`: класс берётся прямо из объекта (`o cell- @`), поэтому базовая реализация работает для любого наследника без override.
+Сами узлы списка — внутренние, наружу не торчат. Заголовок `ulist` стабилен: операции вроде `ulist-add` или `ulist-reverse` не меняют адрес `lst`.
 
-## Семантика вызова метода
-
-`mini-oof2` использует префикс `.`: `arg... obj .method`. **Объект всегда на топе стека**, аргументы — под ним.
-
-```forth
-ulist new value lst
-obj-a lst .add           \ ( addr obj -- )
-0    lst .nth-addr       \ ( n obj -- addr )
-obj-a lst .contains?     \ ( addr obj -- flag )
-' xt  lst .each          \ ( xt obj -- )
-lst .reverse
-lst .dispose
-```
-
-Альтернатива — блок `>o ... o>` без точки:
-
-```forth
-lst >o
-    obj-a add
-    obj-b add
-    len .
-o>
-```
-
-## HOF в стиле Elixir Enum
-
-Все принимают `container` на топе (после аргументов) и возвращают значение или новый контейнер.
+## API: `enum-*`
 
 | Слово | Стек | xt | Описание |
 |---|---|---|---|
-| `enum-count` | `( c xt -- n )` | `( addr -- flag )` | сколько элементов проходят предикат |
-| `enum-any?` | `( c xt -- flag )` | `( addr -- flag )` | хотя бы один true |
-| `enum-all?` | `( c xt -- flag )` | `( addr -- flag )` | все true (пустой → true) |
-| `enum-find` | `( c xt -- addr\|0 )` | `( addr -- flag )` | первый по порядку, для которого xt → true |
-| `enum-reduce` | `( c acc xt -- acc' )` | `( addr acc -- acc' )` | свёртка |
-| `enum-filter` | `( c xt -- c' )` | `( addr -- flag )` | новый контейнер того же типа |
-| `enum-map` | `( c xt -- c' )` | `( addr -- addr' )` | новый контейнер той же длины |
+| `enum-each` | `( xt c -- )` | `( addr -- )` | обойти контейнер |
+| `enum-sort` | `( xt c -- new-ulist )` | `( a b -- flag )` | вернуть новый отсортированный `ulist`; `flag=true` означает «`a` должен идти перед `b`» |
 
-**Важно:** внутри ваших слов `:` передавайте xt через `[']` (не через `'`):
+`enum-sort` всегда возвращает `ulist` — как `Enum.sort` в Elixir всегда возвращает `List`.
 
-```forth
-: positive-only ( c -- c' ) ['] pos? enum-filter ;
-```
-
-На верхнем уровне `'` тоже работает.
+Список покрытых типов на сегодня: `TYPE_ULIST`. Добавление новых типов (`TYPE_HASHMAP` и т.д.) — это новая `of`-ветка в `enum-each` / `enum-sort` плюс реализация соответствующих `xxx-each` / `xxx-sort`.
 
 ## Пример
 
@@ -107,47 +96,49 @@ variable v3   3 v3 !
 variable v4   4 v4 !
 variable v5   5 v5 !
 
-ulist new value xs
-v1 xs .add  v2 xs .add  v3 xs .add  v4 xs .add  v5 xs .add
+ulist-new value xs
+v1 xs ulist-add  v2 xs ulist-add  v3 xs ulist-add
+v4 xs ulist-add  v5 xs ulist-add
 \ xs (head → tail): 5, 4, 3, 2, 1
 
-: even? ( a -- f )    @ 1 and 0= ;
-: sum-step ( a acc -- acc' ) swap @ + ;
+\ обойти и напечатать
+: .v ( addr -- )  @ . ;
+' .v xs ulist-each       \ 5 4 3 2 1
+' .v xs enum-each        \ то же через диспетчер
 
-xs ' even?      enum-count  .            \ 2
-xs ' even?      enum-any?   .            \ -1 (true)
-xs 0 ' sum-step enum-reduce .            \ 15
+\ отсортировать по возрастанию (cmp: *a <= *b)
+: asc ( a b -- f )  swap @ swap @ <= ;
 
-xs ' even? enum-filter value evens
-evens .len .                              \ 2
-0 evens .nth-addr v4 = .                  \ -1 (порядок сохранён)
-evens .dispose
+' asc xs enum-sort value sorted
+' .v sorted ulist-each   \ 1 2 3 4 5
 
-xs .reverse                               \ теперь 1, 2, 3, 4, 5
-xs .dispose
+\ in-place разворот: xs (head → tail) теперь 1, 2, 3, 4, 5
+xs ulist-reverse
+' .v xs ulist-each       \ 1 2 3 4 5
+
+sorted ulist-dispose
+xs ulist-dispose
 ```
 
 ## Полиморфизм
 
-Любая функция, работающая через интерфейс `container`, переиспользуется для любого наследника:
+`enum-each` / `enum-sort` работают с любым контейнером, реализующим свой `*-each` (для сортировки используется `ulist` как промежуточный буфер):
 
 ```forth
-: positive-only ( c -- c' ) ['] pos? enum-filter ;
-
-ulist new value mylist
-\ когда появится hashmap:
-\ hashmap new value myhash
-
-mylist positive-only ...
-\ myhash  positive-only ...           \ тот же код
+\ когда появится hashmap, тот же код продолжит работать:
+hashmap-new value h
+\ ...
+' .v h enum-each
+' asc h enum-sort value top   \ → ulist значений в порядке cmp
 ```
 
 ## Подводные камни
 
-- **`'` vs `[']`.** Внутри `:` xt передаётся через `[']`. Снаружи (на верхнем уровне) — `'`. Это правило Forth, не специфика fenum, но `enum-*` особенно чувствительны.
-- **`fenum-enum.4th` не реентерабельный.** Внутри использует глобальные `variable` для передачи xt/аккумулятора. Нельзя сделать `enum-filter` внутри callback другого `enum-filter`. Для обычного использования это не проблема.
-- **Порядок после filter/map.** Поскольку `.add` в `ulist` кладёт в голову, `enum-filter`/`enum-map` после накопления вызывают `.reverse` — порядок совпадает с порядком итерации входа. Для контейнеров без порядка `reverse` = noop, всё корректно.
-- **После `.dispose` объект использовать нельзя.** Используйте `.clear`, если объект ещё пригодится.
+- **`'` vs `[']`.** Внутри определений (`:`) передавайте xt через `[']`, на верхнем уровне — `'`. Это правило Forth, не специфика fenum.
+- **`enum-sort` не реентерабельна.** Внутри использует глобальные `variable` (массив, длина, индекс, cmp-xt). Нельзя вызвать `enum-sort` из xt другого `enum-sort`. Для обычного использования это не проблема.
+- **`enum-sort` всегда выделяет новый `ulist`.** Не забывайте `ulist-dispose` результата.
+- **После `ulist-dispose` списком пользоваться нельзя.** Если нужен повторный цикл — `ulist-clear`, не `-dispose`.
+- **`ulist-add` кладёт в голову.** Порядок head→tail обратный порядку добавления. `enum-sort` об этом знает и собирает результат корректно.
 
 ## Тесты
 

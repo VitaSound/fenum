@@ -27,20 +27,44 @@ fmix packages.get
 
 ## Подключение
 
+**struct.fs backend** (по умолчанию):
+
 ```forth
 require ./fenum.4th
 ```
+
+**begin-structure backend** (fhdlgen, проекты на `field:`):
+
+```forth
+require ./fenum-bs.4th
+```
+
+В **одном образе Gforth** нельзя смешивать `require ./fenum.4th` и `require ./fenum-bs.4th`, а также нельзя загружать `fenum.4th` рядом с `begin-structure` — `struct.fs` ломает `field:`.
+
+| Backend | Точка входа | Struct |
+|---------|-------------|--------|
+| struct.fs | `fenum.4th` | `struct` / `cell% field` |
+| begin-structure | `fenum-bs.4th` | `begin-structure` / `field:` |
+
+Публичный API (`ulist-*`, `enum-*`, `TYPE_*`) **одинаковый**.
 
 ## Модули
 
 | Файл | Назначение |
 |------|------------|
-| `fenum.4th` | точка входа |
-| `fenum-container.4th` | `container%` (`obj-type`) + константы типов `TYPE_*` |
-| `fenum-ulist.4th` | universal односвязный список (`ulist-*`) |
-| `fenum-enum.4th` | диспетчеры `enum-each`, `enum-sort` |
-| `tests/fenum-ulist_test.4th` | тесты `ulist` |
-| `tests/fenum-enum_test.4th` | тесты `enum-*` |
+| `fenum.4th` | точка входа (struct.fs) |
+| `fenum-bs.4th` | точка входа (begin-structure) |
+| `fenum-types.4th` | константы `TYPE_*` |
+| `fenum-container.4th` | `container%` (struct.fs) |
+| `fenum-ulist.4th` | `ulist-*` (struct.fs) |
+| `fenum-ulist-bs.4th` | `ulist-*` (begin-structure) |
+| `fenum-enum-core.4th` | `enum-each`, `enum-sort` (общий код) |
+| `fenum-enum.4th` | struct.fs + enum-core |
+| `tests/fenum-ulist_test.4th` | тесты ulist (struct.fs) |
+| `tests/fenum_bs_test.4th` | прогон bs backend через `scripts/run-bs-tests.sh` |
+| `tests/bs/fenum-ulist-bs_test.4th` | ulist + interop begin-structure (отдельный Gforth) |
+| `tests/bs/fenum-enum-bs_test.4th` | enum-* (отдельный Gforth) |
+| `tests/fenum-enum_test.4th` | тесты enum-* (struct.fs) |
 
 ## Стек-конвенция
 
@@ -134,6 +158,7 @@ hashmap-new value h
 
 ## Подводные камни
 
+- **Два backend'а, один образ.** Выберите `fenum.4th` **или** `fenum-bs.4th`, не оба. `struct.fs` и `begin-structure` в одной сессии Gforth несовместимы.
 - **`'` vs `[']`.** Внутри определений (`:`) передавайте xt через `[']`, на верхнем уровне — `'`. Это правило Forth, не специфика fenum.
 - **`enum-sort` не реентерабельна.** Внутри использует глобальные `variable` (массив, длина, индекс, cmp-xt). Нельзя вызвать `enum-sort` из xt другого `enum-sort`. Для обычного использования это не проблема.
 - **`enum-sort` всегда выделяет новый `ulist`.** Не забывайте `ulist-dispose` результата.
@@ -143,5 +168,13 @@ hashmap-new value h
 ## Тесты
 
 ```bash
-fmix test
+fmix test    # struct.fs + begin-structure (bs — в отдельных процессах Gforth)
+```
+
+`fmix test` подхватывает `tests/fenum_bs_test.4th`: он запускает `scripts/run-bs-tests.sh`, который гоняет `tests/bs/*` в **чистом** Gforth. Так оба backend'а проверяются одной командой.
+
+Вручную только bs:
+
+```bash
+./scripts/run-bs-tests.sh
 ```

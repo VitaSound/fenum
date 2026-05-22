@@ -1,12 +1,11 @@
-\ Общие фикстуры и хелперы для fenum-тестов.
-\ Подключать один раз из каждого test-файла.
+\ Фикстуры для bs-тестов. Требует чистый образ (без require ./fenum.4th).
 
-require ../fenum.4th
-
-[IFDEF] fenum-backend-bs [IF]
-cr ." [skip] fenum struct tests: bs backend already loaded" cr
-bye
+[IFDEF] fenum-backend-struct [IF]
+cr ." fenum-bs: struct.fs backend already loaded" cr
+abort
 [THEN] [THEN]
+
+require ../../fenum-bs.4th
 
 variable v10   10 v10 !
 variable v20   20 v20 !

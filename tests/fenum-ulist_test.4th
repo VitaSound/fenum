@@ -1,17 +1,5 @@
 require ../forth-packages/ttester/1.1.0/ttester.4th
-require ../fenum.4th
-
-\ ----- тестовые объекты -----
-variable v10   10 v10 !
-variable v20   20 v20 !
-variable v30   30 v30 !
-variable v40   40 v40 !
-
-\ ----- helper: единственный test list, чтобы не возиться со стеком -----
-variable %tl
-
-: mk-tl ( -- )    ulist-new %tl ! ;
-: rm-tl ( -- )    %tl @ ulist-dispose ;
+require ./fenum-test-common.4th
 
 \ ============== базовое ===============================
 T{ mk-tl  %tl @ ulist-empty?  rm-tl -> -1 }T
@@ -51,9 +39,6 @@ T{
 -> -1 -1 0 }T
 
 \ ============== ulist-each: сумма ======================
-variable %sum
-: %add-to-sum ( addr -- ) @ %sum +! ;
-
 T{
   0 %sum !
   mk-tl

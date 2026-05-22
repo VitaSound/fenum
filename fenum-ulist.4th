@@ -1,127 +1,107 @@
-\ fenum-ulist.4th — universal односвязный список узлов (next + addr объекта)
+\ fenum-ulist.4th — universal односвязный список как класс container
 \
-\ Узел не хранит данные объекта, только адрес (ulist-addr) и ссылку (ulist-next).
-\ Пустой список — 0 (ulist-null).
-\
-\ Узлы выделяются через allocate; освобождайте цепочку через ulist-free.
+\ ulist реализует интерфейс container: add/each/len/contains?/nth-addr/
+\ clear/reverse/dispose. Узлы — низкоуровневая struct unode%, наружу
+\ не торчат.
 
-require struct.fs
+require ./fenum-container.4th
 
+\ ---------------------------------------------------------------
+\ Внутренние узлы (обычная gforth struct, не объекты mini-oof2)
+\ ---------------------------------------------------------------
 struct
-    cell% field ulist-next
-    cell% field ulist-addr
-constant ulist-node%
-
-0 constant ulist-null
+    cell% field unode-next
+    cell% field unode-addr
+constant unode%
 
 \ addr next -- node
-: ulist-node ( addr next -- node )
-    ulist-node% allocate throw >r
-    swap r@ ulist-addr !
-    r@ ulist-next !
+: unode-new ( addr next -- node )
+    unode% allocate throw >r
+    swap r@ unode-addr !
+    r@ unode-next !
     r> ;
 
-\ addr list -- list
-: ulist-cons ( addr list -- list )
-    ulist-node ;
-
-\ list -- flag
-: ulist-empty? ( list -- flag )
-    0= ;
-
-\ node -- addr
-: ulist-addr@ ( node -- addr )
-    ulist-addr @ ;
-
-\ node -- list
-: ulist-next@ ( node -- list )
-    ulist-next @ ;
-
-\ node addr --
-: ulist-addr! ( node addr -- )
-    swap ulist-addr ! ;
-
-\ node next --
-: ulist-next! ( node next -- )
-    swap ulist-next ! ;
-
-\ list -- n
-: ulist-len ( list -- n )
+\ chain -- n
+: unode-chain-len ( chain -- n )
     0 swap
     begin dup while
-        swap 1+ swap ulist-next@
+        swap 1+ swap unode-next @
     repeat drop ;
 
-\ list xt --    ; xt ( addr -- )
-: ulist-for-each ( list xt -- )
+\ chain xt --   ; xt ( addr -- )
+: unode-chain-each ( chain xt -- )
     >r begin dup while
-        dup ulist-addr@ r@ execute ulist-next@
+        dup unode-addr @ r@ execute unode-next @
     repeat drop rdrop ;
 
-\ list addr -- node|0
-: ulist-find-addr ( list addr -- node|0 )
+\ chain addr -- node|0
+: unode-chain-find ( chain addr -- node|0 )
     >r begin
         dup while
-            dup ulist-addr@ r@ = if rdrop exit then
-            ulist-next@
+            dup unode-addr @ r@ = if rdrop exit then
+            unode-next @
         repeat
         rdrop ;
 
-\ list addr -- flag
-: ulist-contains? ( list addr -- flag )
-    ulist-find-addr 0<> ;
-
-\ list n -- node|0     ; 0-based, n<0 или n>=len → 0
-: ulist-nth ( list n -- node|0 )
+\ chain n -- node|0     0-based, вне диапазона → 0
+: unode-chain-nth ( chain n -- node|0 )
     dup 0< if 2drop 0 exit then
     0 ?do
         dup 0= if unloop exit then
-        ulist-next@
+        unode-next @
     loop ;
 
-\ list n -- addr|0
-: ulist-nth-addr ( list n -- addr|0 )
-    ulist-nth dup if ulist-addr@ then ;
-
-\ list --     освобождает все узлы (объекты по addr НЕ трогает)
-: ulist-free ( list -- )
+\ chain --     освобождает все узлы цепочки
+: unode-chain-free ( chain -- )
     begin dup while
-        dup ulist-next@ swap free throw
+        dup unode-next @ swap free throw
     repeat drop ;
 
-\ list -- list'    новая цепочка, обратная к list (вход не модифицирует)
-: ulist-reverse ( list -- list' )
+\ chain -- chain'     in-place разворот связей; возвращает новую голову
+: unode-chain-reverse ( chain -- chain' )
     0 swap
     begin dup while
-        dup ulist-addr@ rot ulist-cons swap
-        ulist-next@
-    repeat drop ;
+        dup unode-next @            ( acc cur rest )
+        -rot                         ( rest acc cur )
+        2dup unode-next !            \ cur.next = acc
+        nip swap                     ( cur rest )
+    repeat
+    drop ;
 
-\ list -- list'    поверхностная копия (новые узлы, те же addr)
-: ulist-copy ( list -- list' )
-    ulist-reverse
-    dup ulist-reverse swap ulist-free ;
+\ ---------------------------------------------------------------
+\ Класс ulist : container
+\ ---------------------------------------------------------------
+container class
+    field: ulist-head
+end-class ulist
+standard:field
 
-\ list1 list2 -- list   destructive: list2 подклеивается в хвост list1
-\ list1 пуст → возвращает list2; list2 пуст → возвращает list1.
-: ulist-append! ( list1 list2 -- list )
-    over 0= if nip exit then
-    dup  0= if drop exit then
-    over                       ( l1 l2 cur )
-    begin dup ulist-next@ ?dup while
-        nip                    ( l1 l2 next )
-    repeat                     ( l1 l2 last )
-    swap ulist-next!           ( l1 )
-    ;
+ulist :method empty? ( -- flag )
+    ulist-head @ 0= ;
 
-\ list xt -- list'    ; xt ( addr -- addr' ), новые узлы со значениями xt(addr)
-: ulist-map ( list xt -- list' )
-    >r
-    0 swap
-    begin dup while
-        dup ulist-addr@ r@ execute
-        rot ulist-cons swap
-        ulist-next@
-    repeat drop
-    rdrop
-    dup ulist-reverse swap ulist-free ;
+ulist :method len ( -- n )
+    ulist-head @ unode-chain-len ;
+
+ulist :method add ( addr -- )
+    ulist-head @ unode-new ulist-head ! ;
+
+ulist :method contains? ( addr -- flag )
+    ulist-head @ swap unode-chain-find 0<> ;
+
+ulist :method nth-addr ( n -- addr|0 )
+    ulist-head @ swap unode-chain-nth
+    dup if unode-addr @ then ;
+
+ulist :method each ( xt -- )
+    ulist-head @ swap unode-chain-each ;
+
+ulist :method clear ( -- )
+    ulist-head @ unode-chain-free
+    0 ulist-head ! ;
+
+ulist :method reverse ( -- )
+    ulist-head @ unode-chain-reverse ulist-head ! ;
+
+ulist :method dispose ( -- )
+    ulist-head @ unode-chain-free
+    dispose-self ;

@@ -1,208 +1,172 @@
 require ../forth-packages/ttester/1.1.0/ttester.4th
-require ../fenum-ulist.4th
-require ../fenum-enum.4th
+require ../fenum.4th
 
 \ ---------------------------------------------------------------
-\ Test objects (просто variable как «объекты», их адреса попадут в list)
+\ Тестовые «объекты» — обычные variable, в list попадают их адреса
 \ ---------------------------------------------------------------
-variable obj-a  100 obj-a !
-variable obj-b  200 obj-b !
-variable obj-c  300 obj-c !
-variable obj-d  400 obj-d !
-variable obj-x  999 obj-x !
+variable obj-a   100 obj-a !
+variable obj-b   200 obj-b !
+variable obj-c   300 obj-c !
+variable obj-d   400 obj-d !
+variable obj-x   999 obj-x !
+
+\ ---------------------------------------------------------------
+\ ulist new — пустой список
+\ ---------------------------------------------------------------
+ulist new value L0
+T{ L0 .empty?                  -> true  }T
+T{ L0 .len                     -> 0     }T
 
 \ ===============================================================
-\ ulist-null / ulist-empty?
+\ .add (всегда в голову)
 \ ===============================================================
-T{ ulist-null                   -> 0     }T
-T{ ulist-null ulist-empty?      -> true  }T
+ulist new value lst
+T{ obj-a lst .add  lst .len    -> 1     }T
+T{ lst .empty?                 -> false }T
+T{ 0 lst .nth-addr             -> obj-a }T
 
-\ ===============================================================
-\ ulist-node: построение вручную, проверка полей
-\ ===============================================================
-obj-c ulist-null ulist-node value node-c
-obj-b node-c     ulist-node value node-b
-obj-a node-b     ulist-node value node-a
+T{ obj-b lst .add  lst .len    -> 2     }T
+T{ 0 lst .nth-addr             -> obj-b }T   \ свежий — в голове
+T{ 1 lst .nth-addr             -> obj-a }T
 
-T{ node-a ulist-empty?              -> false }T
-T{ node-a ulist-addr@               -> obj-a }T
-T{ node-a ulist-next@               -> node-b }T
-T{ node-b ulist-addr@               -> obj-b }T
-T{ node-b ulist-next@               -> node-c }T
-T{ node-c ulist-addr@               -> obj-c }T
-T{ node-c ulist-next@               -> 0      }T
+T{ obj-c lst .add
+   obj-d lst .add
+   lst .len                    -> 4     }T
+T{ 0 lst .nth-addr             -> obj-d }T
+T{ 3 lst .nth-addr             -> obj-a }T
 
 \ ===============================================================
-\ ulist-addr! / ulist-next!  (мутация поля)
+\ .nth-addr — границы
 \ ===============================================================
-node-a obj-x ulist-addr!
-T{ node-a ulist-addr@               -> obj-x }T
-node-a obj-a ulist-addr!
-T{ node-a ulist-addr@               -> obj-a }T
-
-\ ===============================================================
-\ ulist-len
-\ ===============================================================
-T{ ulist-null ulist-len             -> 0 }T
-T{ node-c     ulist-len             -> 1 }T
-T{ node-b     ulist-len             -> 2 }T
-T{ node-a     ulist-len             -> 3 }T
+T{ 4  lst .nth-addr            -> 0     }T
+T{ -1 lst .nth-addr            -> 0     }T
+T{ 5  L0  .nth-addr            -> 0     }T
 
 \ ===============================================================
-\ ulist-cons (порядок: cons кладёт addr в голову)
+\ .contains?
 \ ===============================================================
-obj-d ulist-null ulist-cons
-obj-c swap       ulist-cons
-obj-b swap       ulist-cons
-obj-a swap       ulist-cons value cons-list
-
-T{ cons-list ulist-len              -> 4 }T
-T{ cons-list                  ulist-addr@ -> obj-a }T
-T{ cons-list ulist-next@      ulist-addr@ -> obj-b }T
-T{ cons-list ulist-next@ ulist-next@ ulist-addr@ -> obj-c }T
+T{ obj-a lst .contains?        -> true  }T
+T{ obj-b lst .contains?        -> true  }T
+T{ obj-c lst .contains?        -> true  }T
+T{ obj-d lst .contains?        -> true  }T
+T{ obj-x lst .contains?        -> false }T
+T{ obj-a L0  .contains?        -> false }T
 
 \ ===============================================================
-\ ulist-nth / ulist-nth-addr
+\ .each — сайд-эффект через переменную
 \ ===============================================================
-T{ cons-list 0 ulist-nth-addr       -> obj-a }T
-T{ cons-list 1 ulist-nth-addr       -> obj-b }T
-T{ cons-list 2 ulist-nth-addr       -> obj-c }T
-T{ cons-list 3 ulist-nth-addr       -> obj-d }T
-T{ cons-list 4 ulist-nth            -> 0 }T
-T{ cons-list 4 ulist-nth-addr       -> 0 }T
-T{ cons-list -1 ulist-nth           -> 0 }T
-T{ cons-list -1 ulist-nth-addr      -> 0 }T
-T{ ulist-null 0 ulist-nth           -> 0 }T
-T{ ulist-null 5 ulist-nth           -> 0 }T
+variable sum-each   0 sum-each !
+: each-add ( addr -- ) @ sum-each +! ;
 
-\ ===============================================================
-\ ulist-find-addr / ulist-contains?
-\ ===============================================================
-T{ cons-list obj-a ulist-find-addr  ulist-addr@ -> obj-a }T
-T{ cons-list obj-d ulist-find-addr  ulist-addr@ -> obj-d }T
-T{ cons-list obj-x ulist-find-addr  -> 0 }T
-T{ ulist-null obj-a ulist-find-addr -> 0 }T
+T{ 0 sum-each !
+   ' each-add lst .each
+   sum-each @                  -> 1000  }T   \ 100+200+300+400
 
-T{ cons-list obj-a ulist-contains?  -> true  }T
-T{ cons-list obj-x ulist-contains?  -> false }T
-T{ ulist-null obj-a ulist-contains? -> false }T
+T{ 0 sum-each !
+   ' each-add L0 .each
+   sum-each @                  -> 0     }T   \ пустой — xt не вызывается
 
-\ ===============================================================
-\ ulist-for-each: проверим, что xt вызывается для каждого addr
-\ ===============================================================
-variable foreach-sum   0 foreach-sum !
-: foreach-add ( addr -- ) @ foreach-sum +! ;
+\ Порядок обхода: от головы (последний .add) к хвосту (первый .add)
+variable order-buf
+create order-cells 16 cells allot
+0 order-buf !
 
-0 foreach-sum !
-cons-list ' foreach-add ulist-for-each
-T{ foreach-sum @                    -> 1000 }T   \ 100+200+300+400
+: order-record ( addr -- )
+    order-buf @ cells order-cells +
+    !                       \ записать addr
+    1 order-buf +! ;
 
-0 foreach-sum !
-ulist-null ' foreach-add ulist-for-each
-T{ foreach-sum @                    -> 0 }T
+ulist new value L-ord
+obj-a L-ord .add   \ хвост
+obj-b L-ord .add
+obj-c L-ord .add   \ голова
+
+0 order-buf !
+' order-record L-ord .each
+T{ order-buf @                 -> 3      }T
+T{ 0 cells order-cells + @     -> obj-c  }T
+T{ 1 cells order-cells + @     -> obj-b  }T
+T{ 2 cells order-cells + @     -> obj-a  }T
 
 \ ===============================================================
-\ ulist-reverse (non-destructive: оригинал не трогается)
+\ .clear + повторное использование
 \ ===============================================================
-cons-list ulist-reverse value rev-list
+T{ lst .clear   lst .empty?    -> true   }T
+T{ lst .len                    -> 0      }T
+T{ obj-x lst .contains?        -> false  }T
+T{ obj-a lst .add   lst .len   -> 1      }T
+T{ 0 lst .nth-addr             -> obj-a  }T
 
-T{ rev-list ulist-len               -> 4 }T
-T{ rev-list 0 ulist-nth-addr        -> obj-d }T
-T{ rev-list 1 ulist-nth-addr        -> obj-c }T
-T{ rev-list 2 ulist-nth-addr        -> obj-b }T
-T{ rev-list 3 ulist-nth-addr        -> obj-a }T
-
-\ оригинал не изменён
-T{ cons-list 0 ulist-nth-addr       -> obj-a }T
-T{ cons-list 3 ulist-nth-addr       -> obj-d }T
-
-T{ ulist-null ulist-reverse         -> 0 }T
-
-\ узлы rev — новые, не те же, что cons-list
-T{ rev-list cons-list <>            -> true }T
+\ .clear на пустом — no-op
+T{ L0 .clear   L0 .empty?      -> true   }T
 
 \ ===============================================================
-\ ulist-copy (shallow): новые узлы, addr те же
+\ Полиморфизм: тот же код для любого container-наследника
 \ ===============================================================
-cons-list ulist-copy value copy-list
+\ Сейчас наследник только один (ulist), но проверим, что объект
+\ полноценно работает через статически объявленный value-слот.
 
-T{ copy-list ulist-len              -> 4 }T
-T{ copy-list 0 ulist-nth-addr       -> obj-a }T
-T{ copy-list 3 ulist-nth-addr       -> obj-d }T
-T{ copy-list cons-list <>           -> true }T
-T{ ulist-null ulist-copy            -> 0 }T
+ulist new value some-container
 
-\ ===============================================================
-\ ulist-map: ( addr -- addr' )
-\ ===============================================================
-: map-to-x ( addr -- addr ) drop obj-x ;
-: map-id   ( addr -- addr ) ;
+T{ obj-a some-container .add
+   obj-b some-container .add
+   some-container .len          -> 2     }T
 
-cons-list ' map-to-x ulist-map value mx-list
-T{ mx-list ulist-len                -> 4 }T
-T{ mx-list 0 ulist-nth-addr         -> obj-x }T
-T{ mx-list 1 ulist-nth-addr         -> obj-x }T
-T{ mx-list 2 ulist-nth-addr         -> obj-x }T
-T{ mx-list 3 ulist-nth-addr         -> obj-x }T
+\ универсальная функция, не знающая конкретного типа
+: dump-len ( container -- n ) .len ;
+T{ some-container dump-len     -> 2     }T
 
-cons-list ' map-id ulist-map value mi-list
-T{ mi-list ulist-len                -> 4 }T
-T{ mi-list 0 ulist-nth-addr         -> obj-a }T
-T{ mi-list 3 ulist-nth-addr         -> obj-d }T
-T{ mi-list cons-list <>             -> true }T
-
-T{ ulist-null ' map-id ulist-map    -> 0 }T
+: any-empty? ( container -- flag ) .empty? ;
+T{ L0 any-empty?               -> true  }T
+T{ some-container any-empty?   -> false }T
 
 \ ===============================================================
-\ ulist-append! (destructive по list1)
+\ .reverse — in-place разворот ulist
 \ ===============================================================
-\ Готовим свежие копии, чтобы не портить cons-list для следующих тестов.
-cons-list ulist-copy value app-l1   \ [a b c d]
-obj-x ulist-null ulist-cons value app-l2   \ [x]
+ulist new value rev-lst
+obj-a rev-lst .add
+obj-b rev-lst .add
+obj-c rev-lst .add   \ список: c -> b -> a
 
-app-l1 app-l2 ulist-append! value app-res
-T{ app-res ulist-len                -> 5 }T
-T{ app-res 0 ulist-nth-addr         -> obj-a }T
-T{ app-res 4 ulist-nth-addr         -> obj-x }T
+T{ 0 rev-lst .nth-addr         -> obj-c }T
+T{ 2 rev-lst .nth-addr         -> obj-a }T
 
-\ append: пустой + список → список
-T{ 0 cons-list ulist-append! cons-list = -> true }T
+T{ rev-lst .reverse
+   0 rev-lst .nth-addr         -> obj-a }T
+T{ 2 rev-lst .nth-addr         -> obj-c }T
+T{ rev-lst .len                -> 3     }T
 
-\ append: список + пустой → список
-T{ cons-list 0 ulist-append! cons-list = -> true }T
+\ дважды — обратно
+T{ rev-lst .reverse
+   0 rev-lst .nth-addr         -> obj-c }T
 
-\ append: пустой + пустой → пустой
-T{ 0 0 ulist-append!                -> 0 }T
+\ reverse пустого
+ulist new value rev-empty
+T{ rev-empty .reverse  rev-empty .empty? -> true }T
+
+\ reverse из одного элемента
+ulist new value rev-one
+obj-a rev-one .add
+T{ rev-one .reverse
+   0 rev-one .nth-addr         -> obj-a }T
+T{ rev-one .len                -> 1     }T
 
 \ ===============================================================
-\ ulist-free: после освобождения новой цепочки allocate продолжает работать
+\ .dispose — освобождение объекта + его узлов
 \ ===============================================================
-obj-a ulist-null ulist-cons value tmp-list
-obj-b tmp-list   ulist-cons to tmp-list
-tmp-list ulist-free
-\ просто проверка, что после free мы можем создавать новые узлы
-obj-c ulist-null ulist-cons value after-free
-T{ after-free ulist-len             -> 1 }T
-T{ after-free ulist-addr@           -> obj-c }T
+\ После .dispose объект использовать нельзя; проверяем что вызов
+\ не падает и не утекает (на сколько может тест ttester).
+ulist new value disp-lst
+obj-a disp-lst .add
+obj-b disp-lst .add
+obj-c disp-lst .add
+T{ disp-lst .dispose            -> }T
 
-\ ===============================================================
-\ enum-диспетчер ulist-do
-\ ===============================================================
-T{ cons-list uop-empty? ulist-do    -> false }T
-T{ ulist-null uop-empty? ulist-do   -> true  }T
-T{ cons-list uop-addr@ ulist-do     -> obj-a }T
-T{ ulist-null uop-addr@ ulist-do    -> 0     }T
-T{ cons-list uop-next@ ulist-do ulist-addr@ -> obj-b }T
-T{ ulist-null uop-next@ ulist-do    -> 0     }T
-T{ cons-list uop-len    ulist-do    -> 4 }T
-T{ ulist-null uop-len   ulist-do    -> 0 }T
+\ повторно создаём после dispose
+ulist new value disp-lst2
+T{ disp-lst2 .empty?            -> true }T
+T{ disp-lst2 .dispose           -> }T
 
-\ uop-reverse возвращает новый список — проверим длину и голову
-cons-list uop-reverse ulist-do value do-rev
-T{ do-rev ulist-len                 -> 4 }T
-T{ do-rev 0 ulist-nth-addr          -> obj-d }T
-
-cons-list uop-copy ulist-do value do-copy
-T{ do-copy ulist-len                -> 4 }T
-T{ do-copy 0 ulist-nth-addr         -> obj-a }T
-T{ do-copy cons-list <>             -> true }T
+\ dispose на пустом
+ulist new value disp-empty
+T{ disp-empty .dispose          -> }T

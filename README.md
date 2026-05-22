@@ -1,10 +1,10 @@
 # fenum
 
-Forth-библиотека: **ulist** (universal list) — односвязный список узлов с полями `next` и `addr`, плюс enum-стиль операций.
+Forth-библиотека универсальных контейнеров на ООП (`mini-oof2`) с набором функций высшего порядка в стиле Elixir `Enum`.
 
-Префикс **u** в `ulist` / `uop-*` — от **universal**: узел не хранит данные объекта, а только его адрес, поэтому в одной цепочке могут быть объекты любого типа (структура, массив, `variable` и т.д.).
+Идея простая: базовый класс `container` задаёт интерфейс (`add`, `each`, `len`, `contains?`, `nth-addr`, `clear`, `reverse`, `dispose`, `new-empty`). Конкретные контейнеры наследуют его и переопределяют методы. Поверх интерфейса лежат полиморфные слова `enum-filter`, `enum-map`, `enum-reduce`, `enum-count`, `enum-find`, `enum-any?`, `enum-all?` — они работают с **любым** наследником `container` без изменений.
 
-Имя пакета **fenum** = **f**orth + **enum** (диспетчер `uop-*`).
+Сейчас реализован `ulist` (universal односвязный список). При добавлении `hashmap` или другого контейнера все `enum-*` сразу с ним заработают.
 
 Создано с [FMix](https://github.com/VitaSound/fmix).
 
@@ -14,111 +14,140 @@ Forth-библиотека: **ulist** (universal list) — односвязны�
 fmix packages.get
 ```
 
+Используются стандартные модули Gforth: `mini-oof2.fs`, `stuff.fs`.
+
 ## Подключение
 
 ```forth
 require ./fenum.4th
-\ или по частям:
-require ./fenum-ulist.4th
-require ./fenum-enum.4th
-```
-
-## ulist — universal list
-
-| | Обычный l-list | `ulist` |
-|---|----------------|---------|
-| В узле | часто само значение | `ulist-addr` — указатель на объект |
-| Тип элементов | обычно один | любой, по адресу |
-
-```
-struct
-    cell% field ulist-next
-    cell% field ulist-addr
-constant ulist-node%
 ```
 
 ## Модули
 
-Все файлы пакета имеют единый префикс `fenum-`, точка входа — `fenum.4th`.
-
 | Файл | Назначение |
 |------|------------|
-| `fenum.4th` | точка входа (require обоих модулей) |
-| `fenum-ulist.4th` | структура узла, конструктор, обход, поиск, copy/reverse/map/append |
-| `fenum-enum.4th` | enum-операции: константы `uop-*`, обёртки `uop-*-exec`, диспетчер `ulist-do` |
-| `tests/fenum-ulist_test.4th` | тесты на ttester |
+| `fenum.4th` | точка входа |
+| `fenum-container.4th` | абстрактный класс `container` |
+| `fenum-ulist.4th` | класс `ulist` : `container` |
+| `fenum-enum.4th` | HOF: `enum-filter` `-map` `-reduce` `-count` `-find` `-any?` `-all?` |
+| `tests/fenum-ulist_test.4th` | тесты ulist |
+| `tests/fenum-enum_test.4th` | тесты HOF |
 
-## Слова `ulist`
+## Интерфейс `container`
 
-| Слово | Стек | Описание |
+| Метод | Стек | Описание |
 |---|---|---|
-| `ulist-null` | `-- 0` | пустой список |
-| `ulist-node` | `addr next -- node` | создать узел (allocate) |
-| `ulist-cons` | `addr list -- list` | добавить в голову |
-| `ulist-empty?` | `list -- flag` | список пуст? |
-| `ulist-addr@` | `node -- addr` | адрес объекта |
-| `ulist-next@` | `node -- list` | хвост |
-| `ulist-addr!` | `node addr --` | заменить адрес |
-| `ulist-next!` | `node next --` | заменить хвост |
-| `ulist-len` | `list -- n` | длина |
-| `ulist-for-each` | `list xt --` | xt: `( addr -- )` |
-| `ulist-find-addr` | `list addr -- node\|0` | поиск узла по addr |
-| `ulist-contains?` | `list addr -- flag` | есть ли addr |
-| `ulist-nth` | `list n -- node\|0` | n-й узел (0-based) |
-| `ulist-nth-addr` | `list n -- addr\|0` | n-й addr |
-| `ulist-reverse` | `list -- list'` | новая обратная цепочка |
-| `ulist-copy` | `list -- list'` | поверхностная копия |
-| `ulist-map` | `list xt -- list'` | xt: `( addr -- addr' )` |
-| `ulist-append!` | `list1 list2 -- list` | **destructive**: list2 в хвост list1 |
-| `ulist-free` | `list --` | освободить узлы (объекты не трогает) |
+| `empty?` | `( -- flag )` | пустой? |
+| `len` | `( -- n )` | количество элементов |
+| `add` | `( addr -- )` | добавить объект (в `ulist` — в голову, O(1)) |
+| `contains?` | `( addr -- flag )` | содержит объект? |
+| `nth-addr` | `( n -- addr\|0 )` | n-й объект (0-based) |
+| `each` | `( xt -- )` | xt: `( addr -- )` для каждого элемента |
+| `clear` | `( -- )` | удалить все элементы |
+| `reverse` | `( -- )` | для упорядоченных — in-place; иначе noop |
+| `new-empty` | `( -- new-container )` | новый пустой объект **того же класса** |
+| `dispose` | `( -- )` | освободить содержимое + сам объект |
 
-## Enum-операции
+Полиморфизм через `new-empty` использует layout `mini-oof2`: класс берётся прямо из объекта (`o cell- @`), поэтому базовая реализация работает для любого наследника без override.
 
-Константы (`uop-*`) — унарные операции для `ulist-do`:
+## Семантика вызова метода
+
+`mini-oof2` использует префикс `.`: `arg... obj .method`. **Объект всегда на топе стека**, аргументы — под ним.
 
 ```forth
-0 constant uop-empty?
-1 constant uop-addr@
-2 constant uop-next@
-3 constant uop-len
-4 constant uop-reverse
-5 constant uop-copy
+ulist new value lst
+obj-a lst .add           \ ( addr obj -- )
+0    lst .nth-addr       \ ( n obj -- addr )
+obj-a lst .contains?     \ ( addr obj -- flag )
+' xt  lst .each          \ ( xt obj -- )
+lst .reverse
+lst .dispose
 ```
+
+Альтернатива — блок `>o ... o>` без точки:
 
 ```forth
-head uop-len     ulist-do .   \ длина
-head uop-addr@   ulist-do .   \ адрес объекта в голове
-head uop-reverse ulist-do .   \ новый обратный список
+lst >o
+    obj-a add
+    obj-b add
+    len .
+o>
 ```
 
-Бинарные/xt-операции (`ulist-for-each`, `ulist-map`, `ulist-find-addr`, `ulist-cons`, `ulist-append!`) через `ulist-do` не идут — вызывайте их напрямую.
+## HOF в стиле Elixir Enum
+
+Все принимают `container` на топе (после аргументов) и возвращают значение или новый контейнер.
+
+| Слово | Стек | xt | Описание |
+|---|---|---|---|
+| `enum-count` | `( c xt -- n )` | `( addr -- flag )` | сколько элементов проходят предикат |
+| `enum-any?` | `( c xt -- flag )` | `( addr -- flag )` | хотя бы один true |
+| `enum-all?` | `( c xt -- flag )` | `( addr -- flag )` | все true (пустой → true) |
+| `enum-find` | `( c xt -- addr\|0 )` | `( addr -- flag )` | первый по порядку, для которого xt → true |
+| `enum-reduce` | `( c acc xt -- acc' )` | `( addr acc -- acc' )` | свёртка |
+| `enum-filter` | `( c xt -- c' )` | `( addr -- flag )` | новый контейнер того же типа |
+| `enum-map` | `( c xt -- c' )` | `( addr -- addr' )` | новый контейнер той же длины |
+
+**Важно:** внутри ваших слов `:` передавайте xt через `[']` (не через `'`):
+
+```forth
+: positive-only ( c -- c' ) ['] pos? enum-filter ;
+```
+
+На верхнем уровне `'` тоже работает.
 
 ## Пример
 
 ```forth
 require ./fenum.4th
 
-variable item-a  100 item-a !
-variable item-b  200 item-b !
-variable item-c  300 item-c !
+variable v1   1 v1 !
+variable v2   2 v2 !
+variable v3   3 v3 !
+variable v4   4 v4 !
+variable v5   5 v5 !
 
-\ Собираем список: a -> b -> c -> 0
-item-c ulist-null ulist-cons
-item-b swap       ulist-cons
-item-a swap       ulist-cons value head
+ulist new value xs
+v1 xs .add  v2 xs .add  v3 xs .add  v4 xs .add  v5 xs .add
+\ xs (head → tail): 5, 4, 3, 2, 1
 
-head ulist-len .                       \ 3
-head 1 ulist-nth-addr item-b = .       \ -1
-head item-b ulist-contains? .          \ -1
+: even? ( a -- f )    @ 1 and 0= ;
+: sum-step ( a acc -- acc' ) swap @ + ;
 
-: print-addr ( addr -- ) @ . ;
-head ' print-addr ulist-for-each       \ 100 200 300
+xs ' even?      enum-count  .            \ 2
+xs ' even?      enum-any?   .            \ -1 (true)
+xs 0 ' sum-step enum-reduce .            \ 15
 
-head ulist-reverse value rev           \ новая цепочка c -> b -> a
+xs ' even? enum-filter value evens
+evens .len .                              \ 2
+0 evens .nth-addr v4 = .                  \ -1 (порядок сохранён)
+evens .dispose
 
-head ulist-free
-rev  ulist-free
+xs .reverse                               \ теперь 1, 2, 3, 4, 5
+xs .dispose
 ```
+
+## Полиморфизм
+
+Любая функция, работающая через интерфейс `container`, переиспользуется для любого наследника:
+
+```forth
+: positive-only ( c -- c' ) ['] pos? enum-filter ;
+
+ulist new value mylist
+\ когда появится hashmap:
+\ hashmap new value myhash
+
+mylist positive-only ...
+\ myhash  positive-only ...           \ тот же код
+```
+
+## Подводные камни
+
+- **`'` vs `[']`.** Внутри `:` xt передаётся через `[']`. Снаружи (на верхнем уровне) — `'`. Это правило Forth, не специфика fenum, но `enum-*` особенно чувствительны.
+- **`fenum-enum.4th` не реентерабельный.** Внутри использует глобальные `variable` для передачи xt/аккумулятора. Нельзя сделать `enum-filter` внутри callback другого `enum-filter`. Для обычного использования это не проблема.
+- **Порядок после filter/map.** Поскольку `.add` в `ulist` кладёт в голову, `enum-filter`/`enum-map` после накопления вызывают `.reverse` — порядок совпадает с порядком итерации входа. Для контейнеров без порядка `reverse` = noop, всё корректно.
+- **После `.dispose` объект использовать нельзя.** Используйте `.clear`, если объект ещё пригодится.
 
 ## Тесты
 

@@ -1,4 +1,4 @@
-require ../../forth-packages/ttester/1.1.0/ttester.4th
+require ../../forth-packages/ttester/1.2.1/ttester.4th
 require ./fenum-bs-test-common.4th
 
 T{ mk-tl  %tl @ ulist-empty?  rm-tl -> -1 }T

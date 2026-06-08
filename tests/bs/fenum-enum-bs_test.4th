@@ -1,4 +1,4 @@
-require ../../forth-packages/ttester/1.1.0/ttester.4th
+require ../../forth-packages/ttester/1.2.1/ttester.4th
 require ./fenum-bs-test-common.4th
 
 : %asc  ( a b -- flag )   swap @ swap @ <= ;

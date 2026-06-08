@@ -1,4 +1,4 @@
-require ../forth-packages/ttester/1.1.0/ttester.4th
+require ../forth-packages/ttester/1.2.1/ttester.4th
 
 \ see examples:
 \ https://forth-standard.org/standard/testsuite

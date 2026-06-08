@@ -169,6 +169,8 @@ hashmap-new value h
 
 ```bash
 fmix test    # struct.fs + begin-structure (bs — в отдельных процессах Gforth)
+flint
+fcov run fmix test && fcov report
 ```
 
 `fmix test` подхватывает `tests/fenum_bs_test.4th`: он запускает `scripts/run-bs-tests.sh`, который гоняет `tests/bs/*` в **чистом** Gforth. Так оба backend'а проверяются одной командой.

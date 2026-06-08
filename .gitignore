@@ -1,6 +1,7 @@
 build/
 forth-packages/
 .fcov/
+.fmcp/
 *.swp
 *.swo
 .DS_Store

@@ -1,6 +1,6 @@
 forth-package
     key-value name fenum
-    key-value version 0.1.1
+    key-value version 0.1.2
     key-value license COPL
     key-value description fenum
     key-value main fenum.4th

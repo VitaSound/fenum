@@ -1,5 +1,7 @@
 # fenum
 
+[![Cov](https://img.shields.io/badge/Cov-98%25-brightgreen.svg)](https://github.com/VitaSound/fenum)
+
 Forth-библиотека универсальных контейнеров на чистых `struct` с type-tag-диспетчером в стиле Elixir `Enum`.
 
 ## Идея

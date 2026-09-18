@@ -182,3 +182,8 @@ fcov run fmix test && fcov report
 ```bash
 ./scripts/run-bs-tests.sh
 ```
+
+## Экосистема VitaSound
+
+- [feco](https://github.com/VitaSound/feco) — каталог Forth-тулчейна: версии, покрытие, установка всех репозиториев
+- [MIT](https://github.com/VitaSound/MIT) — инженерная методология: декомпозиция задач и уровни аппаратно-программного стека

@@ -68,3 +68,7 @@ Use MCP tools instead of shell when the server is connected (Settings → MCP �
 
 Full tool list, batch tips, troubleshooting: [fmcp/AGENTS.md](https://github.com/VitaSound/fmcp/blob/main/AGENTS.md).  
 `mcp.json` setup: [fmcp/README.md](https://github.com/VitaSound/fmcp/blob/main/README.md#cursor-mcpjson).
+
+## Planning changes: OpenSpec
+
+Plan non-trivial changes with [OpenSpec](https://github.com/Fission-AI/OpenSpec) in [`openspec/`](openspec/): `/opsx-explore` → `/opsx-propose <name>` → `/opsx-apply` → `/opsx-archive` (Cursor). Context and rules: [`openspec/config.yaml`](openspec/config.yaml). Write specs only for the change at hand; the quality workflow above still applies.

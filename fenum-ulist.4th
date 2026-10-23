@@ -14,7 +14,7 @@ require ./fenum-container.4th
 \ ---------------------------------------------------------------
 container%
     cell% field ulist-head
-constant ulist%
+end-struct-const ulist%
 
 \ ---------------------------------------------------------------
 \ Внутренние узлы (приватные, наружу не торчат)
@@ -22,7 +22,7 @@ constant ulist%
 struct
     cell% field unode-addr
     cell% field unode-next
-constant unode%
+end-struct-const unode%
 
 \ addr next -- node
 : unode-new ( addr next -- node )

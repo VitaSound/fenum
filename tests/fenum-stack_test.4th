@@ -18,16 +18,17 @@ require ../fenum.4th
 \ утечка = разница глубины до и после require
 T{ depth depth0 @ - -> 0 }T
 
-\ семантика размеров сохранилась: unode%/ulist% — одна ячейка (16),
+\ семантика размеров сохранилась: anode%/ulist% — 16, nd-size (терм-узел) — 32,
 \ container% — пара ( align size ) для расширения структуры
-T{ unode% -> 16 }T
+T{ anode% -> 16 }T
+T{ nd-size -> 32 }T
 T{ ulist%  -> 16 }T
 T{ container% -> 8 8 }T
 
 \ allocate-семантика: unode-new отработал и вернул стек в чистоту
 T{
   depth depth0 !
-  11 22 unode-new drop
+  11 22 anode-new drop
   depth depth0 @ -
 -> 0 }T
 

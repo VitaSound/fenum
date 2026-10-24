@@ -2,5 +2,7 @@
 \         с диспетчерами в стиле Elixir Enum.
 
 require ./fenum-container.4th
+require ./fenum-addrlist.4th
 require ./fenum-ulist.4th
+require ./fenum-hashmap.4th
 require ./fenum-enum.4th

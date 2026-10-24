@@ -17,8 +17,8 @@ variable %tl
 variable %tl2
 variable %sum
 
-: mk-tl ( -- )    ulist-new %tl ! ;
-: rm-tl ( -- )    %tl @ ulist-dispose ;
-: rm-tl2 ( -- )   %tl2 @ ulist-dispose ;
+: mk-tl ( -- )    addrlist-new %tl ! ;
+: rm-tl ( -- )    %tl @ addrlist-dispose ;
+: rm-tl2 ( -- )   %tl2 @ addrlist-dispose ;
 
 : %add-to-sum ( addr -- ) @ %sum +! ;
